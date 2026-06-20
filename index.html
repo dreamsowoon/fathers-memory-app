@@ -250,9 +250,6 @@
     <button class="bigbtn green" onclick="startCapture()">
       <span class="ico">📷</span> 사진 찍기
     </button>
-    <button class="bigbtn green" style="background:#7a8f55;" onclick="startUpload()">
-      <span class="ico">🖼️</span> 사진 기록
-    </button>
     <button class="bigbtn blue" onclick="openMemories()">
       <span class="ico">📖</span> 추억 보기
     </button>
@@ -311,6 +308,9 @@
     <h1>📖 추억</h1>
   </div>
   <div class="wrap">
+    <button class="bigbtn green" style="margin-bottom:20px; font-size:24px; padding:22px 16px;" onclick="startUpload()">
+      <span class="ico" style="font-size:32px;">🖼️</span> 갤러리에서 불러오기
+    </button>
     <div id="timeline" class="timeline"></div>
   </div>
 </section>
@@ -423,6 +423,7 @@ async function onPhotoChosen(ev){
     emotion: null,
     note: '',
     lat: meta.lat, lng: meta.lng, place:null,
+    source: isGallery ? 'gallery' : 'camera',
   };
 
   // 화면에 표시
@@ -630,8 +631,9 @@ async function saveMemory(){
       emotion:draft.emotion, note:draft.note,
       lat:draft.lat, lng:draft.lng, place:draft.place,
     });
+    const backToMemories = (draft.source === 'gallery');
     resetDraft();
-    showScreen('home');
+    if(backToMemories){ openMemories(); } else { showScreen('home'); }
     toast('저장됐어요!');
   }catch(e){
     alert('저장 중 문제가 생겼어요. 다시 시도해 주세요.');
