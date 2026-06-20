@@ -404,31 +404,138 @@ let draft = null;
 async function onPhotoChosen(ev){
   const file = ev.target.files && ev.target.files[0];
   if(!file) return;
+  const isGallery = (ev.target.id === 'galleryInput');
+
+  // 갤러리에서 고른 사진이면 원본 정보(촬영 날짜·GPS) 먼저 읽기
+  let meta = {date:null, lat:null, lng:null};
+  if(isGallery){
+    meta = await parseExif(file).catch(()=>({date:null,lat:null,lng:null}));
+  }
 
   // 사진 용량 줄이기 (폰 저장공간 절약 + 빠른 표시)
   const blob = await shrinkImage(file, 1280, 0.85);
-  const now = new Date();
+  const when = meta.date || new Date();
 
   draft = {
-    id: 'm_' + now.getTime() + '_' + Math.floor(Math.random()*1000),
-    ts: now.getTime(),
+    id: 'm_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+    ts: when.getTime(),
     blob,
     emotion: null,
     note: '',
-    lat:null, lng:null, place:null,
+    lat: meta.lat, lng: meta.lng, place:null,
   };
 
   // 화면에 표시
   document.getElementById('recPhoto').src = URL.createObjectURL(blob);
-  document.getElementById('recWhen').textContent = formatWhen(now);
-  document.getElementById('recWhere').innerHTML =
-    '<span class="muted">장소를 찾는 중… <span class="spin"></span></span>';
+  document.getElementById('recWhen').innerHTML =
+    formatWhen(when) + (isGallery && meta.date ? ' <span class="muted" style="font-size:16px;">· 사진에 담긴 날짜</span>' : '');
   renderEmoGrid();
   document.getElementById('recNote').value = '';
   showScreen('record');
 
-  // 위치는 백그라운드로 (사진 찍은 직후가 가장 정확)
-  captureLocation();
+  const whereEl = document.getElementById('recWhere');
+  if(isGallery){
+    // 고른 사진: 사진에 담긴 위치를 우선 사용 (현재 위치 아님)
+    if(meta.lat!=null && meta.lng!=null){
+      whereEl.innerHTML = '<span class="muted">사진에 담긴 장소를 찾는 중… <span class="spin"></span></span>';
+      const place = await reverseGeocode(meta.lat, meta.lng);
+      if(!draft) return;
+      draft.place = place;
+      whereEl.textContent = place || (meta.lat.toFixed(4)+', '+meta.lng.toFixed(4));
+    }else{
+      whereEl.innerHTML = '<span class="muted">이 사진엔 장소 정보가 없어요</span>';
+    }
+  }else{
+    // 직접 촬영: 지금 현재 위치 (사진 찍은 직후가 가장 정확)
+    whereEl.innerHTML = '<span class="muted">장소를 찾는 중… <span class="spin"></span></span>';
+    captureLocation();
+  }
+}
+
+/* ---------- 사진 속 정보(EXIF) 읽기 — 촬영 날짜 + GPS ---------- */
+function parseExif(file){
+  return new Promise((resolve)=>{
+    const fr = new FileReader();
+    fr.onload = ()=>{
+      try{ resolve(_readExif(new DataView(fr.result))); }
+      catch(e){ resolve({date:null,lat:null,lng:null}); }
+    };
+    fr.onerror = ()=>resolve({date:null,lat:null,lng:null});
+    // EXIF는 파일 앞부분에 있어 앞 512KB만 읽어도 충분
+    fr.readAsArrayBuffer(file.slice(0, 512*1024));
+  });
+}
+function _readExif(view){
+  const out = {date:null, lat:null, lng:null};
+  if(view.byteLength<4 || view.getUint16(0)!==0xFFD8) return out; // JPEG 아님
+  let off = 2;
+  while(off+4 < view.byteLength){
+    const marker = view.getUint16(off);
+    if(marker===0xFFE1){ return _readApp1(view, off+4) || out; }
+    if((marker & 0xFF00)!==0xFF00) break;
+    off += 2 + view.getUint16(off+2);
+  }
+  return out;
+}
+function _str(view,o,len){
+  let s=''; for(let i=0;i<len;i++){ const c=view.getUint8(o+i); if(c===0) break; s+=String.fromCharCode(c); } return s;
+}
+function _readApp1(view, start){
+  const out = {date:null, lat:null, lng:null};
+  if(_str(view,start,4)!=='Exif') return out;
+  const tiff = start+6;
+  if(tiff+8 > view.byteLength) return out;
+  const little = (view.getUint16(tiff)===0x4949);
+  const g16=(o)=>view.getUint16(o,little);
+  const g32=(o)=>view.getUint32(o,little);
+  if(g16(tiff+2)!==0x002A) return out;
+
+  const readEntries=(dirStart)=>{
+    const map={};
+    if(dirStart+2 > view.byteLength) return map;
+    const n=g16(dirStart);
+    for(let i=0;i<n;i++){
+      const e=dirStart+2+i*12;
+      if(e+12 > view.byteLength) break;
+      const tag=g16(e), type=g16(e+2), count=g32(e+4);
+      const tsize={1:1,2:1,3:2,4:4,5:8,7:1,9:4,10:8}[type]||1;
+      const bytes=tsize*count;
+      const dataOffset = (bytes<=4) ? (e+8) : (tiff+g32(e+8));
+      map[tag]={type,count,dataOffset,ptr:g32(e+8)};
+    }
+    return map;
+  };
+  const ratDeg=(entry)=>{
+    if(!entry || entry.count<3) return null;
+    const o=entry.dataOffset;
+    const r=(p)=>{ const num=g32(p), den=g32(p+4); return den?num/den:0; };
+    return r(o)+r(o+8)/60+r(o+16)/3600;
+  };
+
+  const ifd0 = readEntries(tiff + g32(tiff+4));
+
+  // 촬영 날짜 (Exif sub-IFD의 DateTimeOriginal)
+  if(ifd0[0x8769]){
+    const ex = readEntries(tiff + ifd0[0x8769].ptr);
+    const dt = ex[0x9003] || ex[0x9004];
+    if(dt){
+      const s=_str(view, dt.dataOffset, dt.count);
+      const m=s.match(/(\d{4}):(\d{2}):(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+      if(m) out.date=new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5],+m[6]);
+    }
+  }
+  // GPS 좌표
+  if(ifd0[0x8825]){
+    const gp = readEntries(tiff + ifd0[0x8825].ptr);
+    const lat=ratDeg(gp[0x0002]), lng=ratDeg(gp[0x0004]);
+    const latRef=gp[0x0001]?_str(view,gp[0x0001].dataOffset,1):'N';
+    const lngRef=gp[0x0003]?_str(view,gp[0x0003].dataOffset,1):'E';
+    if(lat!=null && lng!=null){
+      out.lat=(latRef==='S'?-1:1)*lat;
+      out.lng=(lngRef==='W'?-1:1)*lng;
+    }
+  }
+  return out;
 }
 
 /* 사진 리사이즈 */
