@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#5b7c5a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="오늘의 추억">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>오늘의 추억</title>
+<style>
+  :root{
+    --bg:#fbf7ef;          /* 따뜻한 크림 배경 */
+    --card:#ffffff;
+    --ink:#2c2a26;         /* 진한 글자 */
+    --soft:#6f6a60;        /* 보조 글자 */
+    --green:#5b7c5a;       /* 메인 초록 */
+    --green-d:#456044;
+    --blue:#3d6f8e;        /* 보기 버튼 */
+    --blue-d:#2f566e;
+    --line:#e7e0d2;
+    --shadow:0 4px 14px rgba(0,0,0,.10);
+    --r:22px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","맑은 고딕",sans-serif;
+    background:var(--bg); color:var(--ink);
+    font-size:21px; line-height:1.5;
+    -webkit-text-size-adjust:100%;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .screen{display:none; min-height:100vh; flex-direction:column;}
+  .screen.active{display:flex;}
+
+  /* 상단 타이틀바 */
+  .topbar{
+    display:flex; align-items:center; gap:12px;
+    padding:18px 18px calc(14px + env(safe-area-inset-top));
+    padding-top:calc(18px + env(safe-area-inset-top));
+    background:var(--green); color:#fff;
+    position:sticky; top:0; z-index:5;
+    box-shadow:0 2px 8px rgba(0,0,0,.12);
+  }
+  .topbar h1{font-size:26px; margin:0; font-weight:800; letter-spacing:-.5px;}
+  .topbar .back{
+    background:rgba(255,255,255,.18); border:none; color:#fff;
+    font-size:22px; font-weight:700; border-radius:14px;
+    padding:10px 16px; cursor:pointer;
+  }
+  .topbar .spacer{flex:1;}
+
+  .wrap{flex:1; padding:22px 18px 30px;}
+
+  /* 홈 큰 버튼 */
+  .hero{
+    text-align:center; padding:14px 6px 26px;
+  }
+  .hero .emoji{font-size:60px; line-height:1;}
+  .hero h2{font-size:27px; margin:14px 0 4px; font-weight:800;}
+  .hero p{color:var(--soft); margin:0; font-size:19px;}
+
+  .bigbtn{
+    width:100%; border:none; border-radius:var(--r);
+    color:#fff; font-size:30px; font-weight:800;
+    padding:30px 20px; margin-bottom:18px;
+    box-shadow:var(--shadow); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:16px;
+    letter-spacing:-.5px; transition:transform .05s ease;
+  }
+  .bigbtn:active{transform:scale(.98);}
+  .bigbtn .ico{font-size:40px;}
+  .bigbtn.green{background:var(--green);}
+  .bigbtn.green:active{background:var(--green-d);}
+  .bigbtn.blue{background:var(--blue);}
+  .bigbtn.blue:active{background:var(--blue-d);}
+
+  /* 기록(감정+글) 화면 */
+  .photo-preview{
+    width:100%; border-radius:var(--r); display:block;
+    box-shadow:var(--shadow); margin-bottom:18px; object-fit:cover;
+    max-height:46vh; background:#eee;
+  }
+  .auto-info{
+    background:var(--card); border:1px solid var(--line); border-radius:18px;
+    padding:16px 18px; margin-bottom:22px; box-shadow:var(--shadow);
+  }
+  .auto-info .row{display:flex; align-items:center; gap:12px; padding:7px 0; font-size:20px;}
+  .auto-info .row .k{font-size:24px; width:30px; text-align:center;}
+  .auto-info .row .v{flex:1; font-weight:600;}
+  .auto-info .muted{color:var(--soft); font-weight:500;}
+
+  .section-q{font-size:23px; font-weight:800; margin:6px 2px 14px;}
+
+  .emos{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:26px;
+  }
+  .emo{
+    background:var(--card); border:2px solid var(--line); border-radius:18px;
+    padding:16px 6px 12px; text-align:center; cursor:pointer;
+    box-shadow:0 2px 6px rgba(0,0,0,.05); transition:transform .05s;
+  }
+  .emo:active{transform:scale(.96);}
+  .emo.sel{border-color:var(--green); background:#eef4ed;}
+  .emo .e{font-size:38px; line-height:1;}
+  .emo .l{font-size:18px; font-weight:700; margin-top:6px;}
+
+  .note-box{position:relative; margin-bottom:26px;}
+  textarea{
+    width:100%; border:2px solid var(--line); border-radius:18px;
+    padding:16px; font-size:21px; font-family:inherit; color:var(--ink);
+    resize:none; min-height:96px; background:var(--card); line-height:1.5;
+  }
+  textarea:focus{outline:none; border-color:var(--green);}
+  .note-hint{color:var(--soft); font-size:17px; margin:8px 4px 0;}
+
+  .save-row{display:flex; gap:12px;}
+  .save-row .bigbtn{margin-bottom:0;}
+  .btn-ghost{
+    background:#efe9dc; color:var(--ink); border:none; border-radius:var(--r);
+    font-size:22px; font-weight:700; padding:30px 18px; cursor:pointer; flex:0 0 38%;
+  }
+  .btn-ghost:active{background:#e3dccb;}
+
+  /* 추억 보기 */
+  .timeline{display:flex; flex-direction:column; gap:20px;}
+  .memory{
+    background:var(--card); border-radius:var(--r); overflow:hidden;
+    box-shadow:var(--shadow); border:1px solid var(--line);
+  }
+  .memory img{width:100%; display:block; background:#eee; cursor:pointer;}
+  .memory .body{padding:16px 18px 18px;}
+  .memory .when{font-size:22px; font-weight:800; margin:0 0 4px;}
+  .memory .where{color:var(--soft); font-size:19px; margin:0 0 10px; display:flex; gap:8px; align-items:flex-start;}
+  .memory .where .pin{flex:0 0 auto;}
+  .memory .feel{display:inline-flex; align-items:center; gap:8px; background:#eef4ed;
+    border-radius:14px; padding:8px 14px; font-size:20px; font-weight:700; margin-bottom:10px;}
+  .memory .feel .e{font-size:24px;}
+  .memory .text{font-size:21px; margin:6px 0 0; white-space:pre-wrap; line-height:1.55;}
+  .memory .del{
+    margin-top:14px; background:none; border:none; color:#b5524a; font-size:18px;
+    font-weight:700; cursor:pointer; padding:6px 0;
+  }
+  .day-label{font-size:20px; font-weight:800; color:var(--green-d); margin:6px 2px -4px;}
+
+  .empty{text-align:center; color:var(--soft); padding:60px 20px;}
+  .empty .e{font-size:56px;}
+  .empty p{font-size:21px; margin-top:14px;}
+
+  /* 저장 완료 토스트 */
+  .toast{
+    position:fixed; left:50%; bottom:36px; transform:translateX(-50%) translateY(20px);
+    background:var(--green); color:#fff; padding:18px 28px; border-radius:18px;
+    font-size:22px; font-weight:800; box-shadow:0 8px 24px rgba(0,0,0,.25);
+    opacity:0; pointer-events:none; transition:.3s; z-index:50; display:flex; align-items:center; gap:10px;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  /* 사진 크게 보기 */
+  .viewer{
+    position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:60;
+    display:none; align-items:center; justify-content:center; padding:10px;
+  }
+  .viewer.show{display:flex;}
+  .viewer img{max-width:100%; max-height:90vh; border-radius:10px;}
+  .viewer .close{
+    position:absolute; top:calc(14px + env(safe-area-inset-top)); right:16px;
+    background:rgba(255,255,255,.2); color:#fff; border:none; font-size:26px;
+    width:54px; height:54px; border-radius:50%; cursor:pointer;
+  }
+
+  /* 로딩 스피너 */
+  .spin{display:inline-block; width:18px; height:18px; border:3px solid #cbd5c9;
+    border-top-color:var(--green); border-radius:50%; animation:sp 1s linear infinite; vertical-align:middle;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+
+  input[type=file]{display:none;}
+
+  /* 가족 관리 도구 (작게 — 어르신은 위 큰 버튼만 쓰면 됨) */
+  .family-tools{margin-top:26px; padding-top:18px; border-top:1px dashed var(--line);}
+  .family-tools .ft-title{text-align:center; color:var(--soft); font-size:15px; margin-bottom:10px;}
+  .family-tools .ft-row{display:flex; gap:8px; justify-content:center;}
+  .family-tools button{
+    flex:1; background:#efe9dc; color:var(--ink); border:none; border-radius:14px;
+    font-size:16px; font-weight:700; padding:14px 6px; cursor:pointer;
+  }
+  .family-tools button:active{background:#e3dccb;}
+
+  /* ===== 비밀번호 잠금 화면 ===== */
+  #lock{
+    background:var(--green); color:#fff;
+    align-items:center; justify-content:flex-start;
+  }
+  #lock .lock-inner{
+    width:100%; max-width:420px; margin:0 auto;
+    padding:calc(40px + env(safe-area-inset-top)) 22px 30px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  #lock .lk-emoji{font-size:52px; margin-bottom:8px;}
+  #lock h2{font-size:25px; font-weight:800; margin:6px 0 4px; text-align:center;}
+  #lock .lk-sub{font-size:18px; color:#dCe7d9; margin:0 0 26px; text-align:center; min-height:24px;}
+  .dots{display:flex; gap:18px; margin-bottom:34px;}
+  .dots .d{width:20px; height:20px; border-radius:50%; background:rgba(255,255,255,.30); transition:.15s;}
+  .dots .d.on{background:#fff; transform:scale(1.1);}
+  .dots.shake{animation:shake .4s;}
+  @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-10px)}40%,80%{transform:translateX(10px)}}
+  .keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; width:100%; max-width:330px;}
+  .key{
+    background:rgba(255,255,255,.16); border:none; color:#fff;
+    font-size:34px; font-weight:700; border-radius:20px; padding:20px 0;
+    cursor:pointer; transition:transform .05s, background .1s;
+  }
+  .key:active{transform:scale(.94); background:rgba(255,255,255,.30);}
+  .key.fn{font-size:20px; font-weight:700; background:transparent;}
+  .key.blank{background:transparent; pointer-events:none;}
+</style>
+</head>
+<body>
+
+<!-- ===================== 비밀번호 잠금 화면 ===================== -->
+<section id="lock" class="screen">
+  <div class="lock-inner">
+    <div class="lk-emoji">🔒</div>
+    <h2 id="lockTitle">비밀번호를 눌러주세요</h2>
+    <p class="lk-sub" id="lockSub"></p>
+    <div class="dots" id="dots">
+      <div class="d"></div><div class="d"></div><div class="d"></div><div class="d"></div>
+    </div>
+    <div class="keypad" id="keypad"></div>
+  </div>
+</section>
+
+<!-- ===================== 홈 화면 ===================== -->
+<section id="home" class="screen">
+  <div class="topbar">
+    <h1>📷 오늘의 추억</h1>
+  </div>
+  <div class="wrap">
+    <div class="hero">
+      <div class="emoji">🌳</div>
+      <h2>오늘은 어떤 하루였나요?</h2>
+      <p>사진을 찍으면 날짜와 장소가 저절로 기록돼요</p>
+    </div>
+
+    <button class="bigbtn green" onclick="startCapture()">
+      <span class="ico">📷</span> 사진 찍기
+    </button>
+    <button class="bigbtn green" style="background:#7a8f55;" onclick="startUpload()">
+      <span class="ico">🖼️</span> 사진 고르기
+    </button>
+    <button class="bigbtn blue" onclick="openMemories()">
+      <span class="ico">📖</span> 추억 보기
+    </button>
+
+    <input type="file" id="cameraInput" accept="image/*" capture="environment">
+    <input type="file" id="galleryInput" accept="image/*">
+
+    <div class="family-tools">
+      <div class="ft-title">가족 관리</div>
+      <div class="ft-row">
+        <button onclick="exportBackup()">💾 추억 백업</button>
+        <button onclick="startImport()">📥 복원</button>
+        <button onclick="openPinSettings()">⚙️ 비밀번호</button>
+      </div>
+    </div>
+    <input type="file" id="importInput" accept="application/json,.json">
+  </div>
+</section>
+
+<!-- ===================== 기록 화면 ===================== -->
+<section id="record" class="screen">
+  <div class="topbar">
+    <button class="back" onclick="goHome()">‹ 뒤로</button>
+    <div class="spacer"></div>
+    <h1 style="font-size:23px;">기록하기</h1>
+  </div>
+  <div class="wrap">
+    <img id="recPhoto" class="photo-preview" alt="찍은 사진">
+
+    <div class="auto-info">
+      <div class="row"><span class="k">📅</span><span class="v" id="recWhen">—</span></div>
+      <div class="row"><span class="k">📍</span><span class="v" id="recWhere"><span class="muted">장소를 찾는 중… <span class="spin"></span></span></span></div>
+    </div>
+
+    <div class="section-q">오늘 기분은 어떠세요?</div>
+    <div class="emos" id="emoGrid"></div>
+
+    <div class="section-q">한 줄 남기기 <span style="font-weight:600;color:var(--soft);font-size:18px;">(안 적어도 돼요)</span></div>
+    <div class="note-box">
+      <textarea id="recNote" placeholder="예) 오랜만에 친구를 만나 즐거웠다"></textarea>
+      <div class="note-hint">💡 키보드의 🎤 마이크를 누르고 말씀하셔도 적혀요</div>
+    </div>
+
+    <div class="save-row">
+      <button class="btn-ghost" onclick="goHome()">취소</button>
+      <button class="bigbtn green" onclick="saveMemory()">✓ 저장</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 추억 보기 화면 ===================== -->
+<section id="memories" class="screen">
+  <div class="topbar">
+    <button class="back" onclick="goHome()">‹ 뒤로</button>
+    <div class="spacer"></div>
+    <h1>📖 추억</h1>
+  </div>
+  <div class="wrap">
+    <div id="timeline" class="timeline"></div>
+  </div>
+</section>
+
+<!-- 사진 크게 보기 -->
+<div class="viewer" id="viewer" onclick="closeViewer()">
+  <button class="close" onclick="closeViewer()">✕</button>
+  <img id="viewerImg" alt="">
+</div>
+
+<!-- 저장 완료 토스트 -->
+<div class="toast" id="toast"><span>✓</span><span id="toastMsg">저장됐어요!</span></div>
+
+<script>
+/* =========================================================
+   오늘의 추억 — 어르신용 사진 일기 앱
+   사진 → 자동(날짜·시간·GPS 장소) → 기분+한줄 → 폰에 저장
+   ========================================================= */
+
+/* ---------- 감정 목록 ---------- */
+const EMOTIONS = [
+  {e:'😄', l:'즐거워요'},
+  {e:'😍', l:'행복해요'},
+  {e:'😌', l:'편안해요'},
+  {e:'🥰', l:'고마워요'},
+  {e:'😢', l:'슬퍼요'},
+  {e:'😞', l:'속상해요'},
+];
+
+/* ---------- IndexedDB ---------- */
+let db;
+function openDB(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open('todayMemories', 1);
+    req.onupgradeneeded = e=>{
+      const d = e.target.result;
+      if(!d.objectStoreNames.contains('memories')){
+        const st = d.createObjectStore('memories', {keyPath:'id'});
+        st.createIndex('ts','ts');
+      }
+    };
+    req.onsuccess = e=>{ db = e.target.result; resolve(db); };
+    req.onerror = e=>reject(e.target.error);
+  });
+}
+function dbAdd(rec){
+  return new Promise((res,rej)=>{
+    const tx = db.transaction('memories','readwrite');
+    tx.objectStore('memories').add(rec);
+    tx.oncomplete = ()=>res();
+    tx.onerror = e=>rej(e.target.error);
+  });
+}
+function dbAll(){
+  return new Promise((res,rej)=>{
+    const tx = db.transaction('memories','readonly');
+    const req = tx.objectStore('memories').getAll();
+    req.onsuccess = ()=>res(req.result||[]);
+    req.onerror = e=>rej(e.target.error);
+  });
+}
+function dbDelete(id){
+  return new Promise((res,rej)=>{
+    const tx = db.transaction('memories','readwrite');
+    tx.objectStore('memories').delete(id);
+    tx.oncomplete = ()=>res();
+    tx.onerror = e=>rej(e.target.error);
+  });
+}
+
+/* ---------- 화면 전환 ---------- */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+function goHome(){ resetDraft(); showScreen('home'); }
+
+/* ---------- 사진 찍기 / 고르기 ---------- */
+const cameraInput = document.getElementById('cameraInput');
+const galleryInput = document.getElementById('galleryInput');
+function startCapture(){ cameraInput.value=''; cameraInput.click(); }
+function startUpload(){ galleryInput.value=''; galleryInput.click(); }
+cameraInput.addEventListener('change', onPhotoChosen);
+galleryInput.addEventListener('change', onPhotoChosen);
+document.getElementById('importInput').addEventListener('change', onImportFile);
+
+/* 현재 작성 중인 기록 (임시) */
+let draft = null;
+
+async function onPhotoChosen(ev){
+  const file = ev.target.files && ev.target.files[0];
+  if(!file) return;
+
+  // 사진 용량 줄이기 (폰 저장공간 절약 + 빠른 표시)
+  const blob = await shrinkImage(file, 1280, 0.85);
+  const now = new Date();
+
+  draft = {
+    id: 'm_' + now.getTime() + '_' + Math.floor(Math.random()*1000),
+    ts: now.getTime(),
+    blob,
+    emotion: null,
+    note: '',
+    lat:null, lng:null, place:null,
+  };
+
+  // 화면에 표시
+  document.getElementById('recPhoto').src = URL.createObjectURL(blob);
+  document.getElementById('recWhen').textContent = formatWhen(now);
+  document.getElementById('recWhere').innerHTML =
+    '<span class="muted">장소를 찾는 중… <span class="spin"></span></span>';
+  renderEmoGrid();
+  document.getElementById('recNote').value = '';
+  showScreen('record');
+
+  // 위치는 백그라운드로 (사진 찍은 직후가 가장 정확)
+  captureLocation();
+}
+
+/* 사진 리사이즈 */
+function shrinkImage(file, maxSide, quality){
+  return new Promise((resolve)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      let {width:w, height:h} = img;
+      const scale = Math.min(1, maxSide/Math.max(w,h));
+      w = Math.round(w*scale); h = Math.round(h*scale);
+      const cv = document.createElement('canvas');
+      cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      cv.toBlob(b=> resolve(b || file), 'image/jpeg', quality);
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
+/* ---------- 위치(GPS) + 주소 변환 ---------- */
+function captureLocation(){
+  const whereEl = document.getElementById('recWhere');
+  if(!navigator.geolocation){
+    whereEl.innerHTML = '<span class="muted">위치를 알 수 없어요</span>';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(async (pos)=>{
+    if(!draft) return;
+    draft.lat = pos.coords.latitude;
+    draft.lng = pos.coords.longitude;
+    whereEl.innerHTML = '<span class="muted">동네 이름을 찾는 중… <span class="spin"></span></span>';
+    const place = await reverseGeocode(draft.lat, draft.lng);
+    if(!draft) return;
+    draft.place = place;
+    whereEl.textContent = place || (draft.lat.toFixed(4)+', '+draft.lng.toFixed(4));
+  }, (err)=>{
+    whereEl.innerHTML = '<span class="muted">위치 사용을 허용하면 장소가 기록돼요</span>';
+  }, {enableHighAccuracy:true, timeout:12000, maximumAge:60000});
+}
+
+/* 좌표 → 한국어 주소 (OpenStreetMap, 인터넷 있을 때) */
+async function reverseGeocode(lat, lng){
+  try{
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=ko&zoom=16`;
+    const r = await fetch(url, {headers:{'Accept':'application/json'}});
+    if(!r.ok) return null;
+    const j = await r.json();
+    const a = j.address || {};
+    // 한국 주소 우선 조합: 구/동 + 주요시설
+    const parts = [];
+    const big = a.city || a.county || a.province || a.state;
+    const mid = a.borough || a.city_district || a.suburb || a.town;
+    const small = a.neighbourhood || a.quarter || a.village || a.road;
+    const poi = a.amenity || a.shop || a.tourism || a.building || a.leisure;
+    if(big) parts.push(big);
+    if(mid && mid!==big) parts.push(mid);
+    if(small && !parts.includes(small)) parts.push(small);
+    let out = parts.join(' ');
+    if(poi) out = out ? (out + ' · ' + poi) : poi;
+    return out || (j.display_name ? j.display_name.split(',').slice(0,3).join(',') : null);
+  }catch(e){ return null; }
+}
+
+/* ---------- 감정 선택 ---------- */
+function renderEmoGrid(){
+  const grid = document.getElementById('emoGrid');
+  grid.innerHTML = '';
+  EMOTIONS.forEach(em=>{
+    const div = document.createElement('div');
+    div.className = 'emo';
+    div.innerHTML = `<div class="e">${em.e}</div><div class="l">${em.l}</div>`;
+    div.onclick = ()=>{
+      const wasSel = draft && draft.emotion && draft.emotion.l===em.l;
+      grid.querySelectorAll('.emo').forEach(x=>x.classList.remove('sel'));
+      if(wasSel){ if(draft) draft.emotion=null; }      // 다시 누르면 해제
+      else { div.classList.add('sel'); if(draft) draft.emotion={e:em.e,l:em.l}; }
+    };
+    grid.appendChild(div);
+  });
+}
+
+/* ---------- 저장 ---------- */
+async function saveMemory(){
+  if(!draft){ goHome(); return; }
+  draft.note = document.getElementById('recNote').value.trim();
+  try{
+    await dbAdd({
+      id:draft.id, ts:draft.ts, blob:draft.blob,
+      emotion:draft.emotion, note:draft.note,
+      lat:draft.lat, lng:draft.lng, place:draft.place,
+    });
+    resetDraft();
+    showScreen('home');
+    toast('저장됐어요!');
+  }catch(e){
+    alert('저장 중 문제가 생겼어요. 다시 시도해 주세요.');
+  }
+}
+function resetDraft(){ draft = null; }
+
+/* ---------- 추억 보기 ---------- */
+async function openMemories(){
+  showScreen('memories');
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = '<div class="empty"><span class="spin" style="width:30px;height:30px;border-width:4px;"></span></div>';
+  let list = await dbAll();
+  list.sort((a,b)=> b.ts - a.ts); // 최신순
+
+  if(list.length===0){
+    tl.innerHTML = `<div class="empty"><div class="e">🌱</div>
+      <p>아직 기록이 없어요.<br>사진을 찍어 첫 추억을 남겨보세요!</p></div>`;
+    return;
+  }
+
+  tl.innerHTML = '';
+  let lastDay = '';
+  list.forEach(m=>{
+    const d = new Date(m.ts);
+    const dayKey = formatDay(d);
+    if(dayKey !== lastDay){
+      const lbl = document.createElement('div');
+      lbl.className='day-label';
+      lbl.textContent = dayKey;
+      tl.appendChild(lbl);
+      lastDay = dayKey;
+    }
+    tl.appendChild(renderMemoryCard(m, d));
+  });
+}
+
+function renderMemoryCard(m, d){
+  const card = document.createElement('div');
+  card.className = 'memory';
+  const imgURL = URL.createObjectURL(m.blob);
+
+  let html = `<img src="${imgURL}" alt="추억 사진">`;
+  html += `<div class="body">`;
+  html += `<p class="when">${formatTimeOnly(d)}</p>`;
+  if(m.place){
+    html += `<p class="where"><span class="pin">📍</span><span>${escapeHtml(m.place)}</span></p>`;
+  } else if(m.lat!=null){
+    html += `<p class="where"><span class="pin">📍</span><span>${m.lat.toFixed(4)}, ${m.lng.toFixed(4)}</span></p>`;
+  }
+  if(m.emotion){
+    html += `<div class="feel"><span class="e">${m.emotion.e}</span>${escapeHtml(m.emotion.l)}</div>`;
+  }
+  if(m.note){
+    html += `<p class="text">${escapeHtml(m.note)}</p>`;
+  }
+  html += `<button class="del">🗑 지우기</button>`;
+  html += `</div>`;
+  card.innerHTML = html;
+
+  card.querySelector('img').onclick = ()=>openViewer(imgURL);
+  card.querySelector('.del').onclick = async ()=>{
+    if(confirm('이 기록을 지울까요?')){
+      await dbDelete(m.id);
+      openMemories();
+    }
+  };
+  return card;
+}
+
+/* ---------- 사진 크게 보기 ---------- */
+function openViewer(url){
+  document.getElementById('viewerImg').src = url;
+  document.getElementById('viewer').classList.add('show');
+}
+function closeViewer(){ document.getElementById('viewer').classList.remove('show'); }
+
+/* ---------- 날짜 표시 ---------- */
+const DAYS = ['일','월','화','수','목','금','토'];
+function formatWhen(d){
+  const ap = d.getHours()<12 ? '오전':'오후';
+  let h = d.getHours()%12; if(h===0) h=12;
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${DAYS[d.getDay()]}) ${ap} ${h}:${mm}`;
+}
+function formatDay(d){
+  return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일 (${DAYS[d.getDay()]})`;
+}
+function formatTimeOnly(d){
+  const ap = d.getHours()<12 ? '오전':'오후';
+  let h = d.getHours()%12; if(h===0) h=12;
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  return `${ap} ${h}시 ${mm}분`;
+}
+
+/* ---------- 유틸 ---------- */
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+/* ---------- 백업 / 복원 ---------- */
+function blobToDataURL(blob){
+  return new Promise((res,rej)=>{
+    const fr = new FileReader();
+    fr.onload = ()=>res(fr.result);
+    fr.onerror = ()=>rej(fr.error);
+    fr.readAsDataURL(blob);
+  });
+}
+function todayStr(){
+  const d = new Date(); const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+
+async function exportBackup(){
+  try{
+    const list = await dbAll();
+    if(list.length===0){ alert('아직 백업할 추억이 없어요.'); return; }
+    toast('백업 파일을 만드는 중…');
+    const items = [];
+    for(const m of list){
+      items.push({
+        id:m.id, ts:m.ts, emotion:m.emotion, note:m.note,
+        lat:m.lat, lng:m.lng, place:m.place,
+        photo: await blobToDataURL(m.blob)
+      });
+    }
+    const payload = {app:'오늘의추억', version:1, exportedAt:Date.now(), count:items.length, items};
+    const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `추억백업_${todayStr()}_${items.length}개.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    toast(`${items.length}개를 파일로 저장했어요`);
+  }catch(e){
+    alert('백업 중 문제가 생겼어요. 다시 시도해 주세요.');
+  }
+}
+
+function startImport(){
+  const inp = document.getElementById('importInput');
+  inp.value=''; inp.click();
+}
+async function onImportFile(ev){
+  const file = ev.target.files && ev.target.files[0];
+  if(!file) return;
+  try{
+    const data = JSON.parse(await file.text());
+    const items = (data && data.items) || [];
+    if(!items.length){ alert('이 파일에는 추억이 들어있지 않아요.'); return; }
+    const existing = new Set((await dbAll()).map(m=>m.id));
+    let added=0, skipped=0;
+    for(const it of items){
+      if(existing.has(it.id)){ skipped++; continue; }
+      const photoBlob = await (await fetch(it.photo)).blob();
+      await dbAdd({
+        id:it.id, ts:it.ts, blob:photoBlob,
+        emotion:it.emotion||null, note:it.note||'',
+        lat:it.lat??null, lng:it.lng??null, place:it.place||null
+      });
+      added++;
+    }
+    alert(`복원 완료!\n새로 ${added}개를 가져왔어요.` + (skipped?`\n(${skipped}개는 이미 있어 건너뜀)`:''));
+    openMemories();
+  }catch(e){
+    alert('복원에 실패했어요. 올바른 백업 파일인지 확인해 주세요.');
+  }
+}
+
+let toastTimer;
+function toast(msg){
+  document.getElementById('toastMsg').textContent = msg;
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+/* =========================================================
+   비밀번호 잠금 (4자리 PIN) — 데이터는 폰에만, 이건 '엿보기 방지'
+   ========================================================= */
+let pinMode = 'enter';     // 'enter'(입력) | 'setup'(처음정하기) | 'confirm'(한번더)
+let pinBuffer = '';
+let pinFirst = '';
+
+async function hashPin(pin){
+  try{
+    const data = new TextEncoder().encode('today-memory:'+pin);
+    const buf = await crypto.subtle.digest('SHA-256', data);
+    return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+  }catch(e){
+    // 안전장치: crypto 미지원 환경
+    return 'plain:'+pin;
+  }
+}
+
+function buildKeypad(){
+  const kp = document.getElementById('keypad');
+  const fnLabel = (pinMode==='enter') ? '' : '잠금끄기';
+  const keys = ['1','2','3','4','5','6','7','8','9', fnLabel?'FN':'BLANK', '0', 'DEL'];
+  kp.innerHTML = '';
+  keys.forEach(k=>{
+    const b = document.createElement('button');
+    if(k==='BLANK'){ b.className='key blank'; }
+    else if(k==='FN'){ b.className='key fn'; b.textContent='잠금끄기'; b.onclick=pinTurnOff; }
+    else if(k==='DEL'){ b.className='key fn'; b.textContent='⌫'; b.onclick=pinDelete; }
+    else { b.className='key'; b.textContent=k; b.onclick=()=>pinPress(k); }
+    kp.appendChild(b);
+  });
+}
+
+function showLock(mode){
+  pinMode = mode;
+  pinBuffer=''; pinFirst='';
+  const title = document.getElementById('lockTitle');
+  const sub = document.getElementById('lockSub');
+  if(mode==='enter'){
+    title.textContent='비밀번호를 눌러주세요';
+    sub.textContent='';
+  }else{ // setup
+    title.textContent='새 비밀번호 4자리를 정하세요';
+    sub.textContent='아버님께 알려드릴 숫자 4개예요';
+  }
+  buildKeypad();
+  updateDots();
+  showScreen('lock');
+}
+
+function updateDots(){
+  const dots = document.getElementById('dots').children;
+  for(let i=0;i<4;i++){
+    dots[i].classList.toggle('on', i < pinBuffer.length);
+  }
+}
+function shakeDots(){
+  const d = document.getElementById('dots');
+  d.classList.add('shake');
+  setTimeout(()=>d.classList.remove('shake'), 420);
+}
+
+function pinPress(digit){
+  if(pinBuffer.length>=4) return;
+  pinBuffer += digit;
+  updateDots();
+  if(pinBuffer.length===4) setTimeout(onPinComplete, 160);
+}
+function pinDelete(){
+  pinBuffer = pinBuffer.slice(0,-1);
+  updateDots();
+}
+function pinTurnOff(){
+  // 비밀번호 없이 쓰기
+  localStorage.setItem('todayPinSet','1');
+  localStorage.removeItem('todayPinHash');
+  enterApp();
+}
+
+async function onPinComplete(){
+  const sub = document.getElementById('lockSub');
+  const title = document.getElementById('lockTitle');
+
+  if(pinMode==='enter'){
+    const h = await hashPin(pinBuffer);
+    if(h === localStorage.getItem('todayPinHash')){
+      enterApp();
+    }else{
+      shakeDots();
+      sub.textContent = '비밀번호가 달라요. 다시 눌러주세요';
+      pinBuffer=''; updateDots();
+    }
+  }
+  else if(pinMode==='setup'){
+    pinFirst = pinBuffer;
+    pinBuffer=''; pinMode='confirm';
+    title.textContent='확인을 위해 한 번 더';
+    sub.textContent='방금 정한 숫자를 다시 눌러주세요';
+    buildKeypad();
+    updateDots();
+  }
+  else if(pinMode==='confirm'){
+    if(pinBuffer === pinFirst){
+      const h = await hashPin(pinFirst);
+      localStorage.setItem('todayPinHash', h);
+      localStorage.setItem('todayPinSet','1');
+      enterApp();
+    }else{
+      shakeDots();
+      pinMode='setup'; pinFirst=''; pinBuffer='';
+      title.textContent='새 비밀번호 4자리를 정하세요';
+      sub.textContent='숫자가 서로 달라요. 처음부터 다시 정해요';
+      buildKeypad();
+      updateDots();
+    }
+  }
+}
+
+function enterApp(){
+  document.getElementById('lockSub').textContent='';
+  showScreen('home');
+}
+
+/* 홈의 ⚙️ — 비밀번호 변경/끄기 (이미 잠금 해제된 상태에서만 접근) */
+function openPinSettings(){
+  showLock('setup');
+}
+
+/* ---------- 시작 ---------- */
+(async function init(){
+  try{ await openDB(); }
+  catch(e){ alert('저장공간을 열 수 없어요. 브라우저를 최신으로 업데이트해 주세요.'); }
+
+  const wasSet = localStorage.getItem('todayPinSet');
+  const hash = localStorage.getItem('todayPinHash');
+  if(!wasSet){ showLock('setup'); }      // 최초 실행 → 비밀번호 정하기
+  else if(hash){ showLock('enter'); }    // 잠금 켜짐 → 비밀번호 입력
+  else { showScreen('home'); }           // 잠금 꺼둠 → 바로 홈
+})();
+
+/* PWA: 서비스워커 (오프라인 캐시) — 있으면 등록 */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
