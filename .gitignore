@@ -1,2 +1,6 @@
-*.json.bak
+node_modules/
+package.json
+package-lock.json
+_shot_*.png
+demo_*.html
 .DS_Store
