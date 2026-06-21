@@ -289,9 +289,9 @@
   <div class="wrap">
     <img id="recPhoto" class="photo-preview" alt="찍은 사진">
 
-    <div id="collageSaveRow" style="display:none; margin-bottom:18px;">
-      <button class="bigbtn blue" style="font-size:22px; padding:18px 16px; margin-bottom:0;" onclick="saveCollageToPhone()">
-        <span class="ico" style="font-size:28px;">📤</span> 이 사진 폰에 저장 / 보내기
+    <div id="savePhotoRow" style="display:none; margin-bottom:18px;">
+      <button class="bigbtn blue" style="font-size:22px; padding:18px 16px; margin-bottom:0;" onclick="savePhotoToPhone()">
+        <span class="ico" style="font-size:28px;">📤</span> 이 사진 폰에도 저장 / 보내기
       </button>
     </div>
 
@@ -435,7 +435,7 @@ document.getElementById('importInput').addEventListener('change', onImportFile);
 
 /* 현재 작성 중인 기록 (임시) */
 let draft = null;
-let _collageBlob = null;   // 방금 만든 콜라주(폰에 저장/공유용)
+let _photoToSave = null;   // 현재 화면 사진을 폰에 저장/공유할 때 쓸 {data, name}
 
 async function onPhotoChosen(ev){
   const file = ev.target.files && ev.target.files[0];
@@ -462,8 +462,9 @@ async function onPhotoChosen(ev){
     source: isGallery ? 'gallery' : 'camera',
   };
 
-  // 화면에 표시
-  toggleCollageSaveRow(false);
+  // 화면에 표시 — 카메라로 찍은 사진은 폰에 없으니 "폰에도 저장" 버튼 켜기
+  //              (갤러리에서 고른 건 이미 폰에 있어 끔)
+  showSavePhotoRow(!isGallery, file, '추억_'+todayStr()+'.jpg');
   document.getElementById('recPhoto').src = URL.createObjectURL(blob);
   document.getElementById('recWhen').innerHTML =
     formatWhen(when) + (isGallery && meta.date ? ' <span class="muted" style="font-size:16px;">· 사진에 담긴 날짜</span>' : '');
@@ -591,7 +592,7 @@ async function onCollageChosen(ev){
   renderEmoGrid();
   document.getElementById('recNote').value = '';
   setRecordTitle('사진 모음 만들기');
-  toggleCollageSaveRow(true, blob);
+  showSavePhotoRow(true, blob, '추억모음_'+todayStr()+'.jpg');
   showScreen('record');
 
   const whereEl = document.getElementById('recWhere');
@@ -606,25 +607,28 @@ async function onCollageChosen(ev){
   }
 }
 
-/* 콜라주 저장/공유 버튼 켜고 끄기 */
-function toggleCollageSaveRow(show, blob){
-  _collageBlob = show ? blob : null;
-  const row = document.getElementById('collageSaveRow');
+/* 사진 "폰에 저장/보내기" 버튼 켜고 끄기 (data: Blob 또는 File) */
+function showSavePhotoRow(show, data, name){
+  _photoToSave = show ? {data, name: name || ('추억_'+todayStr()+'.jpg')} : null;
+  const row = document.getElementById('savePhotoRow');
   if(row) row.style.display = show ? 'block' : 'none';
 }
 
-/* 만든 콜라주를 폰 사진첩에 저장하거나 카톡 등으로 공유 */
-async function saveCollageToPhone(){
-  if(!_collageBlob) return;
-  const file = new File([_collageBlob], `추억모음_${todayStr()}.jpg`, {type:'image/jpeg'});
+/* 현재 사진을 폰 사진첩에 저장하거나 카톡 등으로 공유 (아이폰·안드로이드 공통) */
+async function savePhotoToPhone(){
+  if(!_photoToSave) return;
+  const {data, name} = _photoToSave;
+  const file = (data instanceof File)
+    ? data
+    : new File([data], name, {type: data.type || 'image/jpeg'});
   if(navigator.canShare && navigator.canShare({files:[file]})){
     try{ await navigator.share({files:[file], title:'오늘의 추억'}); return; }
     catch(e){ if(e && e.name==='AbortError') return; }   // 사용자가 취소
   }
   // 공유를 지원하지 않으면 파일로 내려받기
-  const url = URL.createObjectURL(_collageBlob);
+  const url = URL.createObjectURL(data);
   const a = document.createElement('a');
-  a.href = url; a.download = file.name;
+  a.href = url; a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url), 4000);
   toast('사진을 저장했어요');
@@ -817,7 +821,7 @@ async function saveMemory(){
     alert('저장 중 문제가 생겼어요. 다시 시도해 주세요.');
   }
 }
-function resetDraft(){ draft = null; _collageBlob = null; }
+function resetDraft(){ draft = null; _photoToSave = null; }
 
 function setRecordTitle(t){ const el=document.getElementById('recTitle'); if(el) el.textContent=t; }
 
@@ -838,7 +842,7 @@ async function editMemory(id){
     lat:m.lat, lng:m.lng, place:m.place||null,
     source:'edit',
   };
-  toggleCollageSaveRow(false);
+  showSavePhotoRow(true, m.blob, '추억_'+todayStr()+'.jpg');
   document.getElementById('recPhoto').src = URL.createObjectURL(m.blob);
   document.getElementById('recWhen').innerHTML = formatWhen(new Date(m.ts));
   const whereEl = document.getElementById('recWhere');
