@@ -22,6 +22,8 @@
     --green-d:#456044;
     --blue:#3d6f8e;        /* 보기 버튼 */
     --blue-d:#2f566e;
+    --amber:#c9772f;       /* 사진 모으기 버튼 */
+    --amber-d:#a85f22;
     --line:#e7e0d2;
     --shadow:0 4px 14px rgba(0,0,0,.10);
     --r:22px;
@@ -79,6 +81,8 @@
   .bigbtn.green:active{background:var(--green-d);}
   .bigbtn.blue{background:var(--blue);}
   .bigbtn.blue:active{background:var(--blue-d);}
+  .bigbtn.amber{background:var(--amber);}
+  .bigbtn.amber:active{background:var(--amber-d);}
 
   /* 기록(감정+글) 화면 */
   .photo-preview{
@@ -255,9 +259,13 @@
     <button class="bigbtn blue" onclick="openMemories()">
       <span class="ico">📖</span> 추억 보기
     </button>
+    <button class="bigbtn amber" onclick="startCollage()">
+      <span class="ico">🖼️</span> 사진 모아 만들기
+    </button>
 
     <input type="file" id="cameraInput" accept="image/*" capture="environment">
     <input type="file" id="galleryInput" accept="image/*">
+    <input type="file" id="collageInput" accept="image/*" multiple>
 
     <div class="family-tools">
       <div class="ft-title">가족 관리</div>
@@ -280,6 +288,12 @@
   </div>
   <div class="wrap">
     <img id="recPhoto" class="photo-preview" alt="찍은 사진">
+
+    <div id="collageSaveRow" style="display:none; margin-bottom:18px;">
+      <button class="bigbtn blue" style="font-size:22px; padding:18px 16px; margin-bottom:0;" onclick="saveCollageToPhone()">
+        <span class="ico" style="font-size:28px;">📤</span> 이 사진 폰에 저장 / 보내기
+      </button>
+    </div>
 
     <div class="auto-info">
       <div class="row"><span class="k">📅</span><span class="v" id="recWhen">—</span></div>
@@ -410,14 +424,18 @@ function goHome(){ resetDraft(); showScreen('home'); }
 /* ---------- 사진 찍기 / 고르기 ---------- */
 const cameraInput = document.getElementById('cameraInput');
 const galleryInput = document.getElementById('galleryInput');
+const collageInput = document.getElementById('collageInput');
 function startCapture(){ cameraInput.value=''; cameraInput.click(); }
 function startUpload(){ galleryInput.value=''; galleryInput.click(); }
+function startCollage(){ collageInput.value=''; collageInput.click(); }
 cameraInput.addEventListener('change', onPhotoChosen);
 galleryInput.addEventListener('change', onPhotoChosen);
+collageInput.addEventListener('change', onCollageChosen);
 document.getElementById('importInput').addEventListener('change', onImportFile);
 
 /* 현재 작성 중인 기록 (임시) */
 let draft = null;
+let _collageBlob = null;   // 방금 만든 콜라주(폰에 저장/공유용)
 
 async function onPhotoChosen(ev){
   const file = ev.target.files && ev.target.files[0];
@@ -445,6 +463,7 @@ async function onPhotoChosen(ev){
   };
 
   // 화면에 표시
+  toggleCollageSaveRow(false);
   document.getElementById('recPhoto').src = URL.createObjectURL(blob);
   document.getElementById('recWhen').innerHTML =
     formatWhen(when) + (isGallery && meta.date ? ' <span class="muted" style="font-size:16px;">· 사진에 담긴 날짜</span>' : '');
@@ -470,6 +489,145 @@ async function onPhotoChosen(ev){
     whereEl.innerHTML = '<span class="muted">장소를 찾는 중… <span class="spin"></span></span>';
     captureLocation();
   }
+}
+
+/* =========================================================
+   사진 모아 만들기 (콜라주) — 갤러리에서 여러 장 → 한 장으로
+   ========================================================= */
+const COLLAGE_MAX = 9;
+
+/* 사진 장수에 맞는 칸 배치 (값은 0~1 비율: [x, y, 너비, 높이]) */
+function collageLayout(n){
+  switch(n){
+    case 1: return [[0,0,1,1]];
+    case 2: return [[0,0,1,.5],[0,.5,1,.5]];                                   // 위/아래
+    case 3: return [[0,0,1,.5],[0,.5,.5,.5],[.5,.5,.5,.5]];                    // 위 큰 1 + 아래 2
+    case 4: return [[0,0,.5,.5],[.5,0,.5,.5],[0,.5,.5,.5],[.5,.5,.5,.5]];      // 2×2
+    case 5: return [[0,0,.5,.5],[.5,0,.5,.5],
+                    [0,.5,1/3,.5],[1/3,.5,1/3,.5],[2/3,.5,1/3,.5]];            // 위 2 + 아래 3
+    case 6: return [[0,0,1/3,.5],[1/3,0,1/3,.5],[2/3,0,1/3,.5],
+                    [0,.5,1/3,.5],[1/3,.5,1/3,.5],[2/3,.5,1/3,.5]];            // 3×2
+    default: {                                                                  // 7~9 → 3열 격자
+      const cols=3, rows=Math.ceil(n/cols), rects=[];
+      for(let i=0;i<n;i++){ const r=Math.floor(i/cols), c=i%cols; rects.push([c/cols, r/rows, 1/cols, 1/rows]); }
+      return rects;
+    }
+  }
+}
+
+/* 칸을 꽉 채우도록 가운데 기준으로 잘라 그리기 (cover) */
+function drawCover(ctx, img, dx, dy, dw, dh){
+  const ar = img.naturalWidth/img.naturalHeight, dar = dw/dh;
+  let sx, sy, sw, sh;
+  if(ar > dar){ sh = img.naturalHeight; sw = sh*dar; sx = (img.naturalWidth-sw)/2; sy = 0; }
+  else        { sw = img.naturalWidth;  sh = sw/dar; sx = 0; sy = (img.naturalHeight-sh)/2; }
+  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+}
+
+function loadImage(file){
+  return new Promise((res, rej)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload  = ()=> res({img, url});
+    img.onerror = ()=>{ URL.revokeObjectURL(url); rej(new Error('이미지를 열 수 없어요')); };
+    img.src = url;
+  });
+}
+
+async function buildCollage(files){
+  const sel  = files.slice(0, COLLAGE_MAX);
+  const SIZE = 1200, GAP = 10;
+  const cv = document.createElement('canvas');
+  cv.width = SIZE; cv.height = SIZE;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,SIZE,SIZE);   // 칸 사이 흰 여백
+  const layout = collageLayout(sel.length);
+  for(let i=0;i<sel.length;i++){
+    let loaded;
+    try{ loaded = await loadImage(sel[i]); }catch(e){ continue; }
+    const [fx,fy,fw,fh] = layout[i];
+    drawCover(ctx, loaded.img,
+      fx*SIZE + GAP/2, fy*SIZE + GAP/2, fw*SIZE - GAP, fh*SIZE - GAP);
+    URL.revokeObjectURL(loaded.url);
+  }
+  return await new Promise(res=> cv.toBlob(b=>res(b), 'image/jpeg', 0.85));
+}
+
+async function onCollageChosen(ev){
+  const files = Array.from(ev.target.files || []);
+  if(!files.length) return;
+  if(files.length < 2){ alert('사진을 2장 이상 골라주세요.'); return; }
+
+  toast('사진을 모으는 중…');
+  const picks = files.slice(0, COLLAGE_MAX);
+  if(files.length > COLLAGE_MAX){
+    setTimeout(()=>alert(`사진은 한 번에 ${COLLAGE_MAX}장까지 모을 수 있어요.\n앞에서 고른 ${COLLAGE_MAX}장으로 만들었어요.`), 200);
+  }
+
+  // 사진에 담긴 날짜·장소 모으기 (날짜는 가장 이른 것, 장소는 정보 있는 첫 사진)
+  const metas = [];
+  for(const f of picks){
+    metas.push(await parseExif(f).catch(()=>({date:null,lat:null,lng:null})));
+  }
+  let when = null;
+  metas.forEach(m=>{ if(m.date && (!when || m.date < when)) when = m.date; });
+  when = when || new Date();
+  const gps = metas.find(m=> m.lat!=null && m.lng!=null) || null;
+
+  const blob = await buildCollage(picks);
+
+  draft = {
+    id: 'm_' + Date.now() + '_' + Math.floor(Math.random()*1000),
+    ts: when.getTime(),
+    blob,
+    emotion: null, note: '',
+    lat: gps ? gps.lat : null, lng: gps ? gps.lng : null, place: null,
+    source: 'collage',
+  };
+
+  document.getElementById('recPhoto').src = URL.createObjectURL(blob);
+  document.getElementById('recWhen').innerHTML =
+    formatWhen(when) + ` <span class="muted" style="font-size:16px;">· 사진 ${picks.length}장 모음</span>`;
+  renderEmoGrid();
+  document.getElementById('recNote').value = '';
+  setRecordTitle('사진 모음 만들기');
+  toggleCollageSaveRow(true, blob);
+  showScreen('record');
+
+  const whereEl = document.getElementById('recWhere');
+  if(gps){
+    whereEl.innerHTML = '<span class="muted">사진에 담긴 장소를 찾는 중… <span class="spin"></span></span>';
+    const place = await reverseGeocode(gps.lat, gps.lng);
+    if(!draft) return;
+    draft.place = place;
+    whereEl.textContent = place || (gps.lat.toFixed(4)+', '+gps.lng.toFixed(4));
+  }else{
+    whereEl.innerHTML = '<span class="muted">사진에 장소 정보가 없어요</span>';
+  }
+}
+
+/* 콜라주 저장/공유 버튼 켜고 끄기 */
+function toggleCollageSaveRow(show, blob){
+  _collageBlob = show ? blob : null;
+  const row = document.getElementById('collageSaveRow');
+  if(row) row.style.display = show ? 'block' : 'none';
+}
+
+/* 만든 콜라주를 폰 사진첩에 저장하거나 카톡 등으로 공유 */
+async function saveCollageToPhone(){
+  if(!_collageBlob) return;
+  const file = new File([_collageBlob], `추억모음_${todayStr()}.jpg`, {type:'image/jpeg'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:'오늘의 추억'}); return; }
+    catch(e){ if(e && e.name==='AbortError') return; }   // 사용자가 취소
+  }
+  // 공유를 지원하지 않으면 파일로 내려받기
+  const url = URL.createObjectURL(_collageBlob);
+  const a = document.createElement('a');
+  a.href = url; a.download = file.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  toast('사진을 저장했어요');
 }
 
 /* ---------- 사진 속 정보(EXIF) 읽기 — 촬영 날짜 + GPS ---------- */
@@ -651,7 +809,7 @@ async function saveMemory(){
       emotion:draft.emotion, note:draft.note,
       lat:draft.lat, lng:draft.lng, place:draft.place,
     });
-    const backToMemories = (draft.source === 'gallery' || draft.source === 'edit');
+    const backToMemories = (draft.source === 'gallery' || draft.source === 'edit' || draft.source === 'collage');
     resetDraft();
     if(backToMemories){ openMemories(); } else { showScreen('home'); }
     toast('저장됐어요!');
@@ -659,13 +817,13 @@ async function saveMemory(){
     alert('저장 중 문제가 생겼어요. 다시 시도해 주세요.');
   }
 }
-function resetDraft(){ draft = null; }
+function resetDraft(){ draft = null; _collageBlob = null; }
 
 function setRecordTitle(t){ const el=document.getElementById('recTitle'); if(el) el.textContent=t; }
 
 /* 취소/뒤로 — 편집·갤러리면 추억 보기로, 새 촬영이면 홈으로 */
 function cancelRecord(){
-  const back = draft && (draft.source==='gallery' || draft.source==='edit');
+  const back = draft && (draft.source==='gallery' || draft.source==='edit' || draft.source==='collage');
   resetDraft();
   if(back){ openMemories(); } else { showScreen('home'); }
 }
@@ -680,6 +838,7 @@ async function editMemory(id){
     lat:m.lat, lng:m.lng, place:m.place||null,
     source:'edit',
   };
+  toggleCollageSaveRow(false);
   document.getElementById('recPhoto').src = URL.createObjectURL(m.blob);
   document.getElementById('recWhen').innerHTML = formatWhen(new Date(m.ts));
   const whereEl = document.getElementById('recWhere');
