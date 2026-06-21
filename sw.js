@@ -1,7 +1,7 @@
 /* 오늘의 추억 — 서비스워커
    화면(HTML)은 항상 최신을 먼저 받고(network-first),
    인터넷이 없을 때만 저장해둔 화면을 보여줌. 사진/아이콘 등은 캐시 우선. */
-const CACHE = 'todays-memory-v5';
+const CACHE = 'todays-memory-v6';
 const ASSETS = ['./', './index.html', './manifest.json',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 

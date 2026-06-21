@@ -289,12 +289,6 @@
   <div class="wrap">
     <img id="recPhoto" class="photo-preview" alt="찍은 사진">
 
-    <div id="savePhotoRow" style="display:none; margin-bottom:18px;">
-      <button class="bigbtn blue" style="font-size:22px; padding:18px 16px; margin-bottom:0;" onclick="savePhotoToPhone()">
-        <span class="ico" style="font-size:28px;">📤</span> 이 사진 폰에도 저장 / 보내기
-      </button>
-    </div>
-
     <div class="auto-info">
       <div class="row"><span class="k">📅</span><span class="v" id="recWhen">—</span></div>
       <div class="row"><span class="k">📍</span><span class="v" id="recWhere"><span class="muted">장소를 찾는 중… <span class="spin"></span></span></span></div>
@@ -312,6 +306,12 @@
     <div class="save-row">
       <button class="btn-ghost" onclick="cancelRecord()">취소</button>
       <button class="bigbtn green" onclick="saveMemory()">✓ 저장</button>
+    </div>
+
+    <div id="savePhotoRow" style="display:none; margin-top:14px;">
+      <button class="bigbtn blue" style="font-size:22px; padding:18px 16px; margin-bottom:0;" onclick="savePhotoToPhone()">
+        <span class="ico" style="font-size:28px;">📤</span> 이 사진 폰에도 저장 / 보내기
+      </button>
     </div>
   </div>
 </section>
